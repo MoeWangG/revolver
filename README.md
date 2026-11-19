@@ -47,7 +47,7 @@
 员工不是"一个模型"，而是**一个文件夹**，里面五份小文件决定它是谁、怎么说话、什么不能做、记得什么：
 
 ```
-agents/写手/
+agents/writer/            ← 目录名是员工 id（英文），显示名写在 waker.yaml 里
 ├── SOUL.md        它是谁、怎么判断、什么语气
 ├── identity.md    它服务谁、负责什么
 ├── persona.md     工作习惯、产出格式
@@ -84,7 +84,7 @@ agents/写手/
 - 每一条判定都写进 `data/routing.jsonl`，为什么切、为什么没切，随时能查。
 - 判断靠两样东西：**这句话和每个话题的相似度** + **一个小模型做裁判**。裁判没把握时一律不切。
 
-看板里还能看到 20 多个话题的卡片，点一下就切，跟你自己手动控制不冲突。
+看板里列着这个员工的全部话题卡片，点一下就切，跟你自己手动控制不冲突。
 
 ---
 
@@ -122,12 +122,14 @@ waker board --port 8787   # 或者打开网页看板 http://127.0.0.1:8787
 
 ## 开始用
 
-```bash
-waker agent new 写手 --role "写公众号和小红书稿子" --cwd ~/Documents/writing
-waker agent new 客服 --role "回答产品问题，遇到退款就转人工"
+员工 id 用英文（它会变成目录名），岗位和显示名用中文：
 
-waker chat 写手            # 和它单独聊（保留上下文，下次接着聊）
-waker say 写手 "把上次那篇改成 800 字"   # 一句话，适合写脚本
+```bash
+waker agent new writer --role "写公众号和小红书稿子" --cwd ~/Documents/writing
+waker agent new support --role "回答产品问题，遇到退款就转人工"
+
+waker chat writer          # 和它单独聊（保留上下文，下次接着聊）
+waker say writer "把上次那篇改成 800 字"   # 一句话，适合写脚本
 
 waker board --port 8787    # 看板：今天谁干了什么、花了多少、有哪些待办
 ```
