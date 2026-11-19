@@ -1,0 +1,113 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 764" width="1280" height="764" role="img" aria-label="Revolver 架构：一个入口，多个员工，全部数据在本机">
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#B9AFA3"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="764" fill="#FBF9F6"/>
+
+  <text x="64" y="78" font-family="'Songti SC','Noto Serif SC',Georgia,serif" font-size="40" font-weight="600" fill="#1F1C18">一个人的 AI 团队</text>
+  <text x="64" y="116" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="18" fill="#7A736A">你只在一个地方说话。分派、记忆、权限，都是它的事。</text>
+
+  <text x="64" y="172" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" letter-spacing="2" fill="#A79E92">你说话的地方</text>
+  <text x="428" y="172" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" letter-spacing="2" fill="#A79E92">调度与记忆</text>
+  <text x="884" y="172" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" letter-spacing="2" fill="#A79E92">你的员工</text>
+
+  <!-- 左：入口 -->
+  <g font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif">
+    <rect x="64" y="188" width="300" height="84" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <text x="88" y="222" font-size="17" font-weight="600" fill="#1F1C18">网页看板</text>
+    <text x="88" y="248" font-size="13" fill="#7A736A">对话 · 待办 · 账单</text>
+
+    <rect x="64" y="292" width="300" height="84" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <text x="88" y="326" font-size="17" font-weight="600" fill="#1F1C18">飞书</text>
+    <text x="88" y="352" font-size="13" fill="#7A736A">手机上说一句就走</text>
+
+    <rect x="64" y="396" width="300" height="84" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <text x="88" y="430" font-size="17" font-weight="600" fill="#1F1C18">命令行</text>
+    <text x="88" y="456" font-size="13" font-family="'SF Mono',Menlo,Consolas,monospace" fill="#7A736A">waker say writer "…"</text>
+  </g>
+
+  <!-- 箭头：左 → 中 -->
+  <g stroke="#B9AFA3" stroke-width="1.4" fill="none">
+    <path d="M 368 230 H 414" marker-end="url(#arrow)"/>
+    <path d="M 368 334 H 414" marker-end="url(#arrow)"/>
+    <path d="M 368 438 H 414" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- 中：Revolver -->
+  <rect x="428" y="188" width="372" height="376" rx="14" fill="#FFFFFF" stroke="#1F1C18" stroke-width="1.6"/>
+  <text x="456" y="226" font-family="'Songti SC','Noto Serif SC',Georgia,serif" font-size="22" font-weight="600" fill="#1F1C18">Revolver</text>
+  <text x="556" y="226" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#A79E92">常驻在你机器上</text>
+
+  <g font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif">
+    <line x1="456" y1="252" x2="772" y2="252" stroke="#EFEAE3"/>
+
+    <circle cx="468" cy="292" r="4" fill="#C0492B"/>
+    <text x="488" y="288" font-size="16" font-weight="600" fill="#1F1C18">话题路由</text>
+    <text x="488" y="312" font-size="13" fill="#7A736A">这句话属于哪个会话</text>
+
+    <circle cx="468" cy="356" r="4" fill="#C0492B"/>
+    <text x="488" y="352" font-size="16" font-weight="600" fill="#1F1C18">身份与记忆</text>
+    <text x="488" y="376" font-size="13" fill="#7A736A">它记得你说过什么</text>
+
+    <circle cx="468" cy="420" r="4" fill="#C0492B"/>
+    <text x="488" y="416" font-size="16" font-weight="600" fill="#1F1C18">权限门禁</text>
+    <text x="488" y="440" font-size="13" fill="#7A736A">能不能碰这个文件、跑这条命令</text>
+
+    <circle cx="468" cy="484" r="4" fill="#C0492B"/>
+    <text x="488" y="480" font-size="16" font-weight="600" fill="#1F1C18">上下文瘦身</text>
+    <text x="488" y="504" font-size="13" fill="#7A736A">聊太长就压成纪要，省 token</text>
+
+    <line x1="456" y1="524" x2="772" y2="524" stroke="#EFEAE3"/>
+    <text x="456" y="548" font-size="12" fill="#A79E92" font-family="'SF Mono',Menlo,Consolas,monospace">pi 内核（MIT，开源）</text>
+  </g>
+
+  <!-- 箭头：中 → 右 -->
+  <g stroke="#B9AFA3" stroke-width="1.4" fill="none">
+    <path d="M 804 246 H 840" marker-end="url(#arrow)"/>
+    <path d="M 804 378 H 840" marker-end="url(#arrow)"/>
+    <path d="M 804 510 H 840" marker-end="url(#arrow)"/>
+  </g>
+
+  <!-- 右：员工 -->
+  <g font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif">
+    <rect x="884" y="188" width="332" height="116" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="922" cy="228" r="18" fill="#F3E3DC"/>
+    <text x="922" y="234" text-anchor="middle" font-size="15" fill="#C0492B" font-family="'Songti SC',Georgia,serif">写</text>
+    <text x="956" y="222" font-size="17" font-weight="600" fill="#1F1C18">写手</text>
+    <text x="956" y="248" font-size="13" fill="#7A736A">人设 · 技能 · 自己的记忆</text>
+    <text x="956" y="276" font-size="12" fill="#A79E92">飞书私聊 · 每天 9:00 出日报</text>
+
+    <rect x="884" y="320" width="332" height="116" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="922" cy="360" r="18" fill="#F3E3DC"/>
+    <text x="922" y="366" text-anchor="middle" font-size="15" fill="#C0492B" font-family="'Songti SC',Georgia,serif">助</text>
+    <text x="956" y="354" font-size="17" font-weight="600" fill="#1F1C18">助理</text>
+    <text x="956" y="380" font-size="13" fill="#7A736A">人设 · 技能 · 自己的记忆</text>
+    <text x="956" y="408" font-size="12" fill="#A79E92">看板对话 · 能读文件</text>
+
+    <rect x="884" y="452" width="332" height="116" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="922" cy="492" r="18" fill="#F3E3DC"/>
+    <text x="922" y="498" text-anchor="middle" font-size="15" fill="#C0492B" font-family="'Songti SC',Georgia,serif">客</text>
+    <text x="956" y="486" font-size="17" font-weight="600" fill="#1F1C18">客服</text>
+    <text x="956" y="512" font-size="13" fill="#7A736A">人设 · 技能 · 自己的记忆</text>
+    <text x="956" y="540" font-size="12" fill="#A79E92">飞书群 · 退款转人工</text>
+  </g>
+
+  <!-- 底部：本地文件 -->
+  <rect x="64" y="608" width="1152" height="96" rx="12" fill="#F4EFE8"/>
+  <text x="88" y="642" font-family="'Songti SC','Noto Serif SC',Georgia,serif" font-size="17" font-weight="600" fill="#1F1C18">全部存在你自己的电脑上</text>
+  <text x="88" y="670" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="13" fill="#7A736A">不上传任何第三方。删掉这些文件夹，等于把这个团队彻底清空。</text>
+
+  <g font-family="'SF Mono',Menlo,Consolas,monospace" font-size="13" fill="#4A443C">
+    <rect x="760" y="626" width="118" height="28" rx="14" fill="#FFFFFF" stroke="#E0D8CE"/>
+    <text x="819" y="645" text-anchor="middle">agents/</text>
+    <rect x="892" y="626" width="108" height="28" rx="14" fill="#FFFFFF" stroke="#E0D8CE"/>
+    <text x="946" y="645" text-anchor="middle">data/</text>
+    <rect x="1014" y="626" width="178" height="28" rx="14" fill="#FFFFFF" stroke="#E0D8CE"/>
+    <text x="1103" y="645" text-anchor="middle">~/.pi/agent/sessions/</text>
+  </g>
+
+  <text x="64" y="742" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#A79E92">每个员工是一个文件夹：SOUL / identity / persona / bible / MEMORY + waker.yaml</text>
+</svg>

@@ -1,0 +1,83 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 700" width="1280" height="700" role="img" aria-label="会话切换原理：一句话进来，先打分，再决定继续、切回、还是开新话题">
+  <defs>
+    <marker id="arrow2" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#B9AFA3"/>
+    </marker>
+  </defs>
+
+  <rect width="1280" height="700" fill="#FBF9F6"/>
+
+  <text x="64" y="78" font-family="'Songti SC','Noto Serif SC',Georgia,serif" font-size="40" font-weight="600" fill="#1F1C18">一句话，自己找到该去的会话</text>
+  <text x="64" y="116" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="18" fill="#7A736A">不用开新窗口，也不用记得上次聊到哪。话题跟着内容走。</text>
+
+  <!-- 输入 -->
+  <text x="64" y="164" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" letter-spacing="2" fill="#A79E92">你说</text>
+  <rect x="64" y="176" width="520" height="76" rx="12" fill="#1F1C18"/>
+  <text x="88" y="210" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="16" fill="#FBF9F6">「接着上次那个播客标题，再口语一点」</text>
+  <text x="88" y="236" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#B9AFA3">没有说找谁、也没有说是哪个话题</text>
+
+  <path d="M 324 252 V 286" stroke="#B9AFA3" stroke-width="1.4" fill="none" marker-end="url(#arrow2)"/>
+
+  <!-- 打分 -->
+  <rect x="64" y="292" width="520" height="300" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+  <text x="88" y="324" font-family="'Songti SC','Noto Serif SC',Georgia,serif" font-size="17" font-weight="600" fill="#1F1C18">先和每个旧话题比一遍</text>
+  <text x="88" y="346" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#A79E92">标题 · 摘要 · 最近几条消息，一起算</text>
+
+  <g font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif">
+    <text x="88" y="384" font-size="15" fill="#1F1C18">播客标题</text>
+    <text x="560" y="384" font-size="13" text-anchor="end" fill="#C0492B">0.72</text>
+    <rect x="88" y="392" width="472" height="6" rx="3" fill="#EFEAE3"/>
+    <rect x="88" y="392" width="340" height="6" rx="3" fill="#C0492B"/>
+
+    <text x="88" y="424" font-size="15" fill="#4A443C">周报复盘</text>
+    <text x="560" y="424" font-size="13" text-anchor="end" fill="#A79E92">0.31</text>
+    <rect x="88" y="432" width="472" height="6" rx="3" fill="#EFEAE3"/>
+    <rect x="88" y="432" width="146" height="6" rx="3" fill="#C9BEB2"/>
+
+    <text x="88" y="464" font-size="15" fill="#4A443C">旅行计划</text>
+    <text x="560" y="464" font-size="13" text-anchor="end" fill="#A79E92">0.22</text>
+    <rect x="88" y="472" width="472" height="6" rx="3" fill="#EFEAE3"/>
+    <rect x="88" y="472" width="104" height="6" rx="3" fill="#C9BEB2"/>
+
+    <text x="88" y="504" font-size="15" fill="#4A443C">报销流程</text>
+    <text x="560" y="504" font-size="13" text-anchor="end" fill="#A79E92">0.08</text>
+    <rect x="88" y="512" width="472" height="6" rx="3" fill="#EFEAE3"/>
+    <rect x="88" y="512" width="38" height="6" rx="3" fill="#C9BEB2"/>
+  </g>
+
+  <text x="88" y="556" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#A79E92">再让一个小模型裁判这四个分数，避免"很像但意思不同"</text>
+
+  <!-- 连接线 -->
+  <g stroke="#B9AFA3" stroke-width="1.4" fill="none">
+    <path d="M 584 342 C 616 342, 612 226, 640 226" marker-end="url(#arrow2)"/>
+    <path d="M 584 392 C 618 392, 610 336, 640 336" marker-end="url(#arrow2)"/>
+    <path d="M 584 442 C 618 442, 610 446, 640 446" marker-end="url(#arrow2)"/>
+    <path d="M 584 502 C 618 502, 610 556, 640 556" marker-end="url(#arrow2)"/>
+  </g>
+
+  <!-- 四种结果 -->
+  <g font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif">
+    <rect x="644" y="180" width="572" height="92" rx="12" fill="#FFFFFF" stroke="#C0492B" stroke-width="1.4"/>
+    <circle cx="672" cy="212" r="4" fill="#C0492B"/>
+    <text x="692" y="218" font-size="16" font-weight="600" fill="#1F1C18">很像当前话题</text>
+    <text x="808" y="218" font-size="12" fill="#C0492B">默认</text>
+    <text x="692" y="246" font-size="13" fill="#7A736A">直接接着聊，不打断你</text>
+
+    <rect x="644" y="290" width="572" height="92" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="672" cy="322" r="4" fill="#B9AFA3"/>
+    <text x="692" y="328" font-size="16" font-weight="600" fill="#1F1C18">像另一个旧话题</text>
+    <text x="692" y="356" font-size="13" fill="#7A736A">先问你一句：像是在聊《播客标题》，切过去吗</text>
+
+    <rect x="644" y="400" width="572" height="92" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="672" cy="432" r="4" fill="#B9AFA3"/>
+    <text x="692" y="438" font-size="16" font-weight="600" fill="#1F1C18">都不像，而且很久没聊</text>
+    <text x="692" y="466" font-size="13" fill="#7A736A">开一个新话题，旧的都还在</text>
+
+    <rect x="644" y="510" width="572" height="92" rx="12" fill="#FFFFFF" stroke="#E6E1DA"/>
+    <circle cx="672" cy="542" r="4" fill="#B9AFA3"/>
+    <text x="692" y="548" font-size="16" font-weight="600" fill="#1F1C18">拿不准</text>
+    <text x="692" y="576" font-size="13" fill="#7A736A">不切。宁可少切一次，也不让你觉得它忘了刚才</text>
+  </g>
+
+  <text x="64" y="652" font-family="'PingFang SC','Hiragino Sans GB','Helvetica Neue',Arial,sans-serif" font-size="12" fill="#A79E92">每一次判断都写进 data/routing.jsonl：为什么切、为什么没切，事后能查。</text>
+</svg>
