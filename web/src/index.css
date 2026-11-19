@@ -1,0 +1,123 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply bg-surface-900 text-ink font-sans antialiased;
+    /* Claude 风格：暖米白纸面 + 两团极淡的暖橙光晕制造纵深 */
+    background-image:
+      radial-gradient(900px 520px at 12% -8%, rgba(217, 119, 87, 0.10), transparent 60%),
+      radial-gradient(760px 460px at 92% 4%, rgba(232, 167, 140, 0.10), transparent 62%);
+    background-attachment: fixed;
+  }
+
+  /* 细滚动条：暖色低调，不抢视觉 */
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: rgba(31, 30, 29, 0.18);
+    border-radius: 999px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: rgba(31, 30, 29, 0.32);
+  }
+}
+
+@layer components {
+  .glass {
+    @apply bg-surface-800/85 backdrop-blur-xl border border-line shadow-glass;
+  }
+
+  .glass-hover {
+    @apply transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-lift;
+  }
+
+  /**
+   * 执行步骤（思考 / 工具输出）的内容块：**最多 15 行**，超出在块内滚动。
+   *
+   * 为什么用 lh 单位：它等于当前元素自己的 line-height，所以"15 行"是精确的，
+   * 不受字号/行距调整影响（`11px × leading-relaxed(1.625) ≈ 17.9px/行` 只是兜底值，
+   * 给不认 lh 的老浏览器用）。以前这里是 `45vh` —— 一个块就能占掉半屏，
+   * 11 步叠起来要滚好几屏才读得完。
+   */
+  .step-scroll {
+    max-height: 268px;
+    max-height: 15lh;
+  }
+
+  /* 运行中任务的左侧流光条：低速、低幅，暖橙，长时间盯着也不疲劳 */
+  .running-bar {
+    background: linear-gradient(90deg, transparent, #d97757, transparent);
+    background-size: 320px 100%;
+    @apply animate-shimmer;
+  }
+
+  /**
+   * 待办提醒：**呼吸**，不是高频闪烁。
+   *
+   * 高频闪烁（<1s 一周期）是报警器的语言，盯一会儿就疲劳；这里用 2.4s / 1.6s
+   * 的低对比渐变位移抓注意力，同时保持正文可读。只染卡片，不闪整页。
+   */
+  .todo-due {
+    background-image: linear-gradient(
+      100deg,
+      rgba(217, 119, 87, 0.12),
+      rgba(192, 138, 62, 0.26),
+      rgba(217, 119, 87, 0.12)
+    );
+    background-size: 220% 100%;
+    border-color: rgba(192, 138, 62, 0.5);
+    animation: todo-breathe 2.4s ease-in-out infinite;
+  }
+
+  .todo-overdue {
+    background-image: linear-gradient(
+      100deg,
+      rgba(191, 77, 67, 0.16),
+      rgba(191, 77, 67, 0.30),
+      rgba(191, 77, 67, 0.16)
+    );
+    background-size: 220% 100%;
+    border-color: rgba(191, 77, 67, 0.6);
+    border-left-width: 3px;
+    animation: todo-breathe 1.6s ease-in-out infinite;
+  }
+
+  @keyframes todo-breathe {
+    0%,
+    100% {
+      background-position: 0% 50%;
+    }
+    50% {
+      background-position: 100% 50%;
+    }
+  }
+
+  /* 系统要求减少动态效果：不闪，用静态底色 + 色条表达同样的紧急度 */
+  @media (prefers-reduced-motion: reduce) {
+    .todo-due,
+    .todo-overdue {
+      animation: none;
+    }
+    .todo-due {
+      background-image: none;
+      background-color: rgba(192, 138, 62, 0.14);
+    }
+    .todo-overdue {
+      background-image: none;
+      background-color: rgba(191, 77, 67, 0.16);
+    }
+  }
+}

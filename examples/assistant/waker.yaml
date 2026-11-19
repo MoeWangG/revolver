@@ -1,0 +1,23 @@
+# Role definition for the demo teammate.
+# Copy this directory to agents/<id>/ and edit it — agents/ is git-ignored.
+name: "Assistant"
+role: "General-purpose assistant: answers questions, reads files, runs safe commands"
+model: auto
+cwd: "."
+enabled: true
+
+# Optional per-agent LLM override. Without this, Pi's own model routing is used.
+# llm:
+#   provider: deepseek
+#   model: deepseek-v4-pro
+#   thinking: medium
+#   # apiKey belongs in the same directory, in secrets.json (git-ignored)
+
+policy:
+  sandbox: false
+  commandAllow: ["ls", "cat", "head", "tail", "wc", "sort", "uniq", "grep", "find", "echo", "pwd", "cd", "mkdir", "touch", "cp", "git", "node", "npm", "pnpm", "python3"]
+  commandDeny: ["rm ", "mv ", "sudo", "chmod", "chown"]
+  pathAllow: ["."]
+  pathDeny: [".ssh", ".aws", ".env", "node_modules"]
+  requireConfirm: ["delete files", "push to remote", "publish"]
+  selfEdit: false

@@ -1,0 +1,430 @@
+/**
+ * pi memory-extension: 跨会话记忆 + 知识库
+ *
+ * 能力:
+ *   - 自动抽取: 每 2 轮对话(agent_end)抽取记忆入库; 会话结束(session_shutdown)全量补抽
+ *   - 自动注入: 每轮对话开始(before_agent_start)以用户 prompt 语义检索, 注入 system prompt
+ *   - 主动检索: memory_recall / knowledge_search / memory_save / knowledge_import 工具(注册后 system prompt 会告知 agent)
+ *
+ * 依赖: memory-server (默认 http://127.0.0.1:8970, 可用环境变量 PI_MEMORY_SERVER 覆盖)
+ *
+ * 安装: 复制/软链到 ~/.pi/agent/extensions/memory.ts, 然后 /reload 或重启 pi
+ */
+// 注意: 扩展运行于 ~/.pi/agent/extensions/, 工具参数 schema 手写为 JSON Schema 对象(TypeBox 兼容)。
+// 运行时仅依赖 node 内置模块 + 全局 fetch, 零 npm 依赖。
+import type { ExtensionAPI, AgentToolResult } from "@earendil-works/pi-coding-agent";
+import { readFile, stat } from "node:fs/promises";
+import { basename, extname, resolve } from "node:path";
+
+// multi-pi-memory: 记忆中心地址（默认独立端口 8971，避免与服务单例的 8970 混用）
+const SERVER =
+  process.env.WAKER_MEMORY_SERVER ?? process.env.PI_MEMORY_SERVER ?? "http://127.0.0.1:8971";
+/**
+ * 命名空间 = "当前是谁"。
+ * waker 拉起 pi 子进程时会注入 WAKER_ID（员工 id），据此把记忆按人隔离。
+ * 独立使用（不经 waker）时为空 —— 服务端退化为全局共享，与旧行为一致。
+ */
+const NAMESPACE = (process.env.WAKER_MEMORY_NAMESPACE ?? process.env.WAKER_ID ?? "").trim();
+/**
+ * 共享档命名空间: 与 NAMESPACE 并列的一档, **所有员工都可见**。
+ *
+ * 只该放"换个 bot 也成立"的东西 —— 用户画像(偏好/说话方式)与本机环境事实。
+ * 本岗位的领域积累(素材、论点、项目决策)仍走 NAMESPACE, 别混进来:
+ * 库内 evidence/thesis 本就占 59%, 共享池一被项目垃圾灌满, 每个 bot 的注入位都会被占掉。
+ *
+ * 默认 private: 自动抽取一律写 NAMESPACE; 只有显式 memory_save(scope="shared") 才进共享档。
+ */
+const SHARED_NAMESPACE = (process.env.WAKER_MEMORY_SHARED_NAMESPACE ?? "shared").trim();
+const INJECT_TIMEOUT_MS = 20000;   // 记忆注入超时: 它在 before_agent_start 关键路径上。
+// 正常几百毫秒, 但 worker 可能正在占用同一个 LM Studio 推理 —— 那时注入要排队,
+// 6s 会导致偶发"抽取失败: This operation was aborted"。20s 足够等到模型空出,
+// 又不会真的把会话拖死(超时也只是本轮不注入, 对话照常)。
+const EXTRACT_EVERY_N_TURNS = 2;   // 每 N 轮用户消息抽取一次
+const IMPORT_MAX_BYTES = 10 * 1024 * 1024;  // 单文件导入上限 10MB
+const IMPORT_EXTS = new Set([".md", ".markdown", ".txt"]);
+
+// 每个会话缓存的待抽取消息(会话内存活)
+const pendingBySession = new Map<string, Array<{ role: string; content: string }>>();
+
+function getText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (Array.isArray(content)) {
+    return content
+      .filter((c) => c && typeof c === "object" && (c as any).type === "text")
+      .map((c) => (c as any).text)
+      .join("")
+      .trim();
+  }
+  return "";
+}
+
+function extractMessages(messages: readonly any[]): Array<{ role: string; content: string }> {
+  const out: Array<{ role: string; content: string }> = [];
+  for (const m of messages) {
+    const role = m?.role;
+    if (role !== "user" && role !== "assistant") continue;
+    const text = getText(m?.content);
+    if (text) out.push({ role, content: text });
+  }
+  return out;
+}
+
+function fmtMessages(messages: Array<{ role: string; content: string }>) {
+  return messages.map((m) => ({ role: m.role, content: m.content.slice(0, 2000) }));
+}
+
+// 默认 300s —— 只适合检索类调用(实际毫秒级)。
+// ★ 抽取入队现在应该秒回, 所以单独用短超时: 服务不在就快速失败留着下次再试,
+//   绝不把 pi 拖在那里等。
+const POST_TIMEOUT_MS = 300_000;
+const EXTRACT_POST_TIMEOUT_MS = 15_000;
+
+async function post(path: string, body: unknown, timeoutMs = POST_TIMEOUT_MS): Promise<any> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), timeoutMs);
+  try {
+    const r = await fetch(`${SERVER}${path}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+      signal: ctrl.signal,
+    });
+    if (!r.ok) {
+      const t = await r.text();
+      throw new Error(`memory-server ${r.status}: ${t.slice(0, 200)}`);
+    }
+    return await r.json();
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** 读取本地 md/txt 文件并上传到 memory-server 知识库 */
+async function importLocalFile(filePath: string): Promise<string> {
+  const abs = resolve(filePath);
+  const ext = extname(abs).toLowerCase();
+  if (!IMPORT_EXTS.has(ext)) {
+    return `不支持的文件类型: ${ext || "(无扩展名)"}。仅支持 md/txt (${[...IMPORT_EXTS].join(", ")})。`;
+  }
+  let st;
+  try {
+    st = await stat(abs);
+  } catch {
+    return `文件不存在: ${abs}`;
+  }
+  if (!st.isFile()) {
+    return `不是普通文件: ${abs}`;
+  }
+  if (st.size > IMPORT_MAX_BYTES) {
+    return `文件过大 (${(st.size / 1024 / 1024).toFixed(1)}MB), 单文件上限 ${IMPORT_MAX_BYTES / 1024 / 1024}MB。`;
+  }
+  const buf = await readFile(abs);
+  const name = basename(abs);
+  const fd = new FormData();
+  fd.append("file", new Blob([buf]), name);
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 300_000);
+  try {
+    const r = await fetch(`${SERVER}/api/knowledge/upload`, { method: "POST", body: fd, signal: ctrl.signal });
+    const d = await r.json();
+    if (!r.ok) throw new Error(d.error || `HTTP ${r.status}`);
+    return `已导入 ${d.added}/${d.chunks} 块: ${d.title}`;
+  } catch (e: any) {
+    return `导入失败: ${e?.message ?? e}`;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function textResult(text: string): AgentToolResult<any> {
+  return { content: [{ type: "text" as const, text }], details: {} };
+}
+
+export default function memoryExtension(pi: ExtensionAPI) {
+  // ---- 自动注入: 非阻塞预取 + 本轮消费上一轮结果 ----
+  // 重要(2026-09-15 事故复盘): 本钩子在 before_agent_start 关键路径上, 且所有扩展
+  // 的 handler 是串行 await 的 —— 一旦这里 await 网络(最长 6s) 或记忆服务抖动,
+  // 会拖住整个 agent 启动, 拉长"用户消息未落盘"的危险窗口(见 wal.ts)。
+  // 因此: 命中缓存的上一轮结果立即返回(微秒级), 同时在后台预取下一轮。
+  const injectCache = new Map<string, { query: string; context: string }>();
+  let lastWarm: Promise<void> | null = null;
+
+  function warmInject(query: string, ns: string): void {
+    const q = query.slice(0, 2000);
+    // 单飞: 上一轮预取未完成则跳过, 避免堆积
+    if (lastWarm) return;
+    lastWarm = (async () => {
+      try {
+        const d = await post("/api/inject", { query: q, namespace: ns }, INJECT_TIMEOUT_MS);
+        if (d?.context) injectCache.set(ns, { query: q, context: d.context });
+      } catch (e: any) {
+        console.error("[memory] 预取失败:", e?.message ?? e);
+      } finally {
+        lastWarm = null;
+      }
+    })();
+  }
+
+  pi.on("before_agent_start", async (event, ctx) => {
+    // 关键路径: 绝不做网络等待, 只读缓存 + 触发后台预取
+    try {
+      const prompt = (event.prompt ?? "").trim();
+      if (!prompt) return;
+      // 命名空间优先取员工 id（waker 注入的 WAKER_ID）；没有则退化为按工作目录区分
+      const ns = NAMESPACE || ctx.cwd || "";
+      const hit = injectCache.get(ns);
+      // 缓存只在"不同 query"时视为有效(同一轮不会重复注入)
+      if (hit && hit.query !== prompt.slice(0, 2000)) {
+        warmInject(prompt, ns);
+        return { systemPrompt: `${event.systemPrompt}\n\n${hit.context}` };
+      }
+      warmInject(prompt, ns);
+    } catch (e: any) {
+      console.error("[memory] 注入异常:", e?.message ?? e);
+    }
+    return undefined;
+  });
+
+  // ---- 自动抽取: 每 2 轮用户消息触发; 会话结束补抽 ----
+  function queueExtract(sessionId: string, messages: Array<{ role: string; content: string }>) {
+    const buf = pendingBySession.get(sessionId) ?? [];
+    buf.push(...messages);
+    // 只保留最近 N*3 条
+    const max = EXTRACT_EVERY_N_TURNS * 3 * 2;
+    const trimmed = buf.slice(-max);
+    pendingBySession.set(sessionId, trimmed);
+
+    const userCount = trimmed.filter((m) => m.role === "user").length;
+    if (userCount >= EXTRACT_EVERY_N_TURNS) {
+      void flushExtract(sessionId);
+    }
+  }
+
+  async function flushExtract(sessionId: string) {
+    const buf = pendingBySession.get(sessionId);
+    if (!buf || buf.length < 2) return;
+    pendingBySession.set(sessionId, []);
+    try {
+      // 服务端(extract.mode=queue)收到即入队并立即返回, 真实抽取由独立 worker
+      // 进程完成。所以这里的超时给短一点也没关系: 超时了说明服务不在,
+      // 那就留回缓冲下次再试, 绝不能拖住 pi。
+      await post("/api/extract", {
+        messages: fmtMessages(buf),
+        session_id: sessionId,
+        namespace: NAMESPACE,
+      }, { timeoutMs: EXTRACT_POST_TIMEOUT_MS });
+    } catch (e: any) {
+      // 失败则留回缓冲, 下次再试
+      const cur = pendingBySession.get(sessionId) ?? [];
+      pendingBySession.set(sessionId, [...buf, ...cur].slice(-40));
+      console.error("[memory] 抽取失败:", e?.message ?? e);
+    }
+  }
+
+  /**
+   * 会话退出时的最后一搏: 不 await、不等结果, 仅把请求发出去。
+   *
+   * 为什么不用普通 fetch: pi --print/退出时进程会立刻结束, 未完成的
+   * fetch 被 abort —— 服务端根本收不到, 最后一批对话就丢了。
+   * 用 keepalive 让运行时把请求送完(不随本进程死亡)。
+   *
+   * 注意: 这只提高"发送成功率", 不保证一定送达 —— 因为真正的抽取本来
+   * 就在服务端队列里, 掉了也会在下次会话时由其它任务带着上下文补上。
+   */
+  function fireAndForgetExtract(sessionId: string) {
+    const buf = pendingBySession.get(sessionId);
+    if (!buf || buf.length < 2) return;
+    try {
+      void fetch(`${SERVER}/api/extract`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ messages: fmtMessages(buf), session_id: sessionId, namespace: NAMESPACE }),
+        keepalive: true,
+      }).catch(() => {});
+    } catch {
+      /* 尽力而为, 失败无所谓 */
+    }
+  }
+
+  pi.on("agent_end", async (event, ctx) => {
+    try {
+      // 平台内部的 pi 调用（如会话瘦身的摘要/纪要播种）**不该**沉淀成用户记忆 ——
+      // 否则"你是纪要整理器""【上下文备忘｜自动生成】"这类提示词会被当成对话抽进库。
+      // 由调用方设 WAKER_MEMORY_NO_EXTRACT=1 关闭抽取（注入仍然保留）。
+      if ((process.env.WAKER_MEMORY_NO_EXTRACT ?? "") === "1") return;
+      const sid = ctx.sessionManager.getSessionId();
+      const msgs = extractMessages(event.messages);
+      if (msgs.length) queueExtract(sid, msgs);
+    } catch (e: any) {
+      console.error("[memory] agent_end:", e?.message ?? e);
+    }
+  });
+
+  pi.on("session_shutdown", async (_event, ctx) => {
+    try {
+      const sid = ctx.sessionManager.getSessionId();
+      // ★ 会话关闭时 pi 可能立刻退出进程, 未完成的 fetch 会被 abort,
+      //   导致最后一批对话丢掉。所以这里用 keepalive 发出请求
+      //   (浏览器/Node 会把它交给主进程送完, 不随本进程死亡),
+      //   并且绝不 await —— 不能拖住 pi 退出。
+      fireAndForgetExtract(sid);
+      pendingBySession.delete(sid);
+    } catch (e: any) {
+      console.error("[memory] session_shutdown:", e?.message ?? e);
+    }
+  });
+
+  // ---- 主动检索工具 ----
+  pi.registerTool({
+    name: "memory_recall",
+    label: "回忆跨会话记忆",
+    description:
+      "检索跨会话记忆库中与查询相关的用户事实/偏好/目标/决定。当用户问'我之前说过/决定过/偏好是什么'或需要个性化背景时调用。",
+    promptSnippet: "用 memory_recall 回忆用户过去的偏好、目标、决定",
+    promptGuidelines: [
+      "当用户问题涉及过去的对话、偏好、决定时, 先调用 memory_recall 再回答。",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "检索查询, 描述想回忆的主题" },
+        n: { type: "number", description: "返回条数, 默认 5" },
+      },
+      required: ["query"],
+    } as any,
+    execute: async (_id, params) => {
+      try {
+        const d = await post("/api/search", {
+          query: params.query,
+          n: params.n ?? 5,
+          namespace: NAMESPACE,
+        });
+        const r = d.results ?? [];
+        if (!r.length) {
+          return textResult("记忆库中未找到相关记忆。");
+        }
+        const lines = r.map((m: any, i: number) =>
+          `[${m.category}] (相关度 ${m.final_score.toFixed(2)}) ${m.content}`);
+        return textResult(`以下是相关记忆:\n${lines.join("\n")}`);
+      } catch (e: any) {
+        return textResult(`记忆检索失败: ${e?.message ?? e}`);
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "knowledge_search",
+    label: "检索知识库",
+    description:
+      "在知识库中检索与查询相关的文档片段。当用户问题需要项目文档、规范、参考资料等知识库内容时调用。",
+    promptSnippet: "用 knowledge_search 检索知识库文档",
+    promptGuidelines: [
+      "当任务需要查阅知识库文档(规范/参考资料)时, 先调用 knowledge_search。",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        query: { type: "string", description: "检索查询" },
+        n: { type: "number", description: "返回条数, 默认 5" },
+      },
+      required: ["query"],
+    } as any,
+    execute: async (_id, params) => {
+      try {
+        const d = await post("/api/search", { query: params.query, source: "knowledge", n: params.n ?? 5 });
+        const r = d.results ?? [];
+        if (!r.length) {
+          return textResult("知识库中未找到相关内容。");
+        }
+        const lines = r.map((m: any, i: number) =>
+          `[片段${i + 1}] (相关度 ${m.final_score.toFixed(2)})\n${m.content}`);
+        return textResult(`知识库内容:\n${lines.join("\n\n")}`);
+      } catch (e: any) {
+        return textResult(`知识库检索失败: ${e?.message ?? e}`);
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "memory_save",
+    label: "保存记忆",
+    description:
+      "把用户明确表达的重要信息(偏好/目标/决定/事实)保存到跨会话记忆。当用户说'记住这个/以后都这样/我偏好'时调用。" +
+      " scope=shared 时该记忆对所有员工可见, 只用于'换个岗位也成立'的信息(用户画像、本机环境事实)。",
+    promptSnippet: "用 memory_save 保存用户明确要求记住的信息",
+    promptGuidelines: [
+      "当用户明确要求记住某事, 或表达了重要偏好/决定时, 调用 memory_save。",
+      "仅当这条信息对**所有员工**都成立(用户的偏好/习惯、本机环境事实)时才用 scope=shared;" +
+        "本岗位的素材、论点、项目决策一律用默认(private)。",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        content: { type: "string", description: "要记住的内容" },
+        category: {
+          type: "string", enum: ["fact", "preference", "goal", "decision"],
+          description: "类别, 默认 fact",
+        },
+        scope: {
+          type: "string", enum: ["private", "shared"],
+          description: "归属, 默认 private(只有自己可见); shared=所有员工可见",
+        },
+      },
+      required: ["content"],
+    } as any,
+    execute: async (_id, params) => {
+      try {
+        const shared = params.scope === "shared" && !!SHARED_NAMESPACE;
+        const d = await post("/api/memories", {
+          content: params.content,
+          category: params.category ?? "fact",
+          namespace: shared ? SHARED_NAMESPACE : NAMESPACE,
+        });
+        const scopeLabel = shared ? "所有员工可见" : "仅自己可见";
+        return textResult(`已保存记忆(${scopeLabel}): ${d.memory?.content ?? ""}`);
+      } catch (e: any) {
+        return textResult(`保存失败: ${e?.message ?? e}`);
+      }
+    },
+  });
+
+  pi.registerTool({
+    name: "knowledge_import",
+    label: "导入本地文件到知识库",
+    description:
+      "把本地 md/txt 文件导入知识库(切块向量化), 之后 knowledge_search 可检索。当用户给了一个文件路径/文件名并要求记住、学习、导入或加入知识库时调用。",
+    promptSnippet: "用 knowledge_import 把用户指定的本地文件导入知识库",
+    promptGuidelines: [
+      "当用户提供本地文件路径并要求'导入知识库/学习这个文档/记住这个文件'时, 调用 knowledge_import(path)。",
+      "支持 .md/.markdown/.txt, 单文件 ≤ 10MB。相对路径基于当前工作目录解析。",
+    ],
+    parameters: {
+      type: "object",
+      properties: {
+        path: { type: "string", description: "本地文件路径(相对或绝对), 如 ./docs/README.md 或 /Users/x/note.txt" },
+      },
+      required: ["path"],
+    } as any,
+    execute: async (_id, params) => {
+      return textResult(await importLocalFile(String(params.path ?? "")));
+    },
+  });
+
+  // ---- /memory 命令: 查看当前记忆库概况 ----
+  pi.registerCommand("memory", {
+    description: "查看跨会话记忆库状态",
+    handler: async (_args, ctx) => {
+      try {
+        const d = await post("/api/status", {});
+        const s = d.stats ?? {};
+        ctx.ui.notify(
+          `记忆库: 共 ${s.total} 条 (对话 ${s.by_source?.conversation ?? 0}, ` +
+          `知识库 ${s.by_source?.knowledge ?? 0}, 手动 ${s.by_source?.manual ?? 0})`,
+          "info",
+        );
+      } catch (e: any) {
+        ctx.ui.notify(`memory-server 不可用: ${e?.message ?? e}`, "error");
+      }
+    },
+  });
+}

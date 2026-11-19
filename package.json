@@ -1,0 +1,41 @@
+{
+  "name": "revolver",
+  "version": "2.4.0",
+  "description": "Local, self-hosted AI teammate platform: topic-aware sessions, Feishu-native, built on Pi",
+  "type": "module",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/MoeWangG/revolver.git"
+  },
+  "homepage": "https://github.com/MoeWangG/revolver#readme",
+  "bugs": {
+    "url": "https://github.com/MoeWangG/revolver/issues"
+  },
+  "packageManager": "pnpm@11.7.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "bin": {
+    "waker": "bin/waker.ts"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "node --experimental-strip-types bin/waker.ts",
+    "link": "bash scripts/link.sh",
+    "test": "node --experimental-strip-types tests/routing.test.ts && node --experimental-strip-types tests/askGate.test.ts && node --experimental-strip-types tests/semantic.test.ts && node --experimental-strip-types tests/semanticRank.test.ts && node --experimental-strip-types tests/decisionLog.test.ts && node --experimental-strip-types tests/sessionIndex.test.ts && node --experimental-strip-types tests/episode.test.ts && node --experimental-strip-types tests/modes.test.ts && node --experimental-strip-types tests/conversations.test.ts && node --experimental-strip-types tests/summary.test.ts && node --experimental-strip-types tests/sessionName.test.ts && node --experimental-strip-types tests/topicCard.test.ts && node --experimental-strip-types tests/arbiter.test.ts && node --experimental-strip-types tests/browserBroker.test.ts && node --experimental-strip-types tests/browserClientAutostart.test.ts && node --experimental-strip-types tests/feishuMedia.test.ts && node --experimental-strip-types tests/docExtract.test.ts && node --experimental-strip-types tests/attachments.test.ts && node --experimental-strip-types tests/runError.test.ts && node --experimental-strip-types tests/sessionHistoryImages.test.ts && node --experimental-strip-types tests/todos.test.ts && node --experimental-strip-types tests/architecture.test.ts",
+    "report:route": "node --experimental-strip-types scripts/route-report.ts",
+    "doctor": "node --experimental-strip-types bin/waker.ts doctor",
+    "web:dev": "cd web && pnpm dev",
+    "web:build": "node --experimental-strip-types scripts/gen-architecture.ts && cd web && pnpm build"
+  },
+  "dependencies": {
+    "node-cron": "^3.0.3",
+    "yaml": "^2.6.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/node-cron": "^3.0.11",
+    "typescript": "^5.7.0"
+  }
+}

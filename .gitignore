@@ -1,0 +1,48 @@
+# 依赖与构建产物
+node_modules/
+dist/
+*.tsbuildinfo
+
+# 运行期数据：任务流水、编译产物、索引（本地专属，不入库）
+data/
+web/dist/
+web/src/generated/
+
+# 日志
+*.log
+.DS_Store
+
+# 本地环境覆盖
+.env
+.env.local
+# v2 的本机隔离变量（PI_HOME / 端口 / 记忆服务地址），换机器要改，不入库
+.env.v2
+
+# 员工密钥：per-profile 的 LLM apiKey / 飞书 appSecret，不入库
+agents/*/secrets.json
+
+# Python 虚拟环境与缓存：vendor 下的记忆服务带 .venv，体积约 100M，不入库
+.venv/
+venv/
+__pycache__/
+*.pyc
+
+# 记忆服务的运行数据与本机配置：包含真实记忆索引，绝不入库
+vendor/multi-pi-memory/memory-server/data/
+vendor/multi-pi-memory/memory-server/config.yaml
+
+# 临时草稿与工具输出
+.scratch/
+.append_result.txt
+
+# 个人员工档案：开源仓库只保留脱敏后的 examples/
+# 你自己的员工（含 long-term memory、本机绝对路径）永远不进版本库
+agents/
+
+# 个人笔记与本机计划，不属于产品代码
+.codebuddy/
+outputs/
+plans/
+FROZEN.md
+docs/private/
+

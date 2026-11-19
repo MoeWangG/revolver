@@ -1,0 +1,4 @@
+# pnpm 11 起，依赖构建脚本的白名单只能写在这里（package.json 的 pnpm 字段与 .npmrc 均已失效）。
+# esbuild 需要 postinstall 下载平台二进制，不放行会导致 vite 无法启动、pnpm build 直接失败。
+allowBuilds:
+  esbuild: true
