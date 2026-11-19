@@ -1,179 +1,193 @@
-# Revolver
+# Revolver · 一个人的 AI 团队，跑在你自己电脑上
 
-**A local, self-hosted AI teammate platform.** Many topics, one chat surface: say something and it lands in the right conversation — you don't go hunting for a session.
+[English](README.en.md) | 中文
 
-Built on [Pi](https://github.com/earendil-works/pi) (MIT). Feishu-native. Runs on your own machine.
+![看板](docs/看板预览.png)
 
-[English](README.md) | [中文](README.zh.md)
+一句话：**你只管说话，它自己把这句话交给该听的那个 AI。**
 
-[![CI](https://github.com/MoeWangG/revolver/actions/workflows/ci.yml/badge.svg)](https://github.com/MoeWangG/revolver/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+你可能有 3 个、5 个甚至 10 个 AI —— 写手、助理、客服、选题、写代码的。现在的做法是开一堆窗口，自己记得"这件事该找谁"、"上次聊到哪了"。这个项目把这件事反过来：**你只有一个说话的地方**（网页或飞书），剩下的分派、记忆、上下文都由它负责。
 
-![Board](docs/看板预览.png)
+---
 
-## Why "revolver"
+## 为什么不用现成的
 
-The barrel is the channel, the cylinder is the session. Each message is a round: it should fire into the chamber that already holds that conversation, not into a fresh one.
+你选一个 AI 助手，本质上是在选三件事：**数据在谁手里**、**每次花多少钱**、**你还能不能改它**。
 
-Most agent tools make *you* manage context — pick a session, start a new chat, copy the old thread. This one tries the opposite: you just talk, and continuity is the platform's job.
+| 你在用的 | 问题 |
+|---|---|
+| 各种闭源 AI 平台 | 你的对话、文件、客户资料都在别人服务器上。不开源 = 你没法确认它拿你的数据干了什么 |
+| 把上万字上下文一股脑塞给模型的产品（OpenClaw 这类） | 每次提问都重发整段历史。上下文越大越贵，而且大部分内容跟这次的问题无关 |
+| 同时开 8 个桌面 agent | 你自己当调度员：切窗口、复制粘贴、记不清哪个聊过什么 |
 
-## What makes it different
+这个项目的三个取舍：
 
-### 1. Topic-aware session routing
+1. **全在你自己电脑上。** 员工档案、聊天记录、记忆、任务流水，全是本地文件（`agents/`、`data/`），没有任何一处上传到第三方。你随时能打开看、删掉、备份。代码 MIT，随便改。
+2. **只发该发的那部分。** 一句话进来，先判断它属于哪个话题，只把那一个话题的上下文交过去；聊得太长还会自动压成一段纪要。省的是真金白银。
+3. **一个入口，多个员工。** 你不需要记得找谁、也不需要说"这是新话题"，它自己判断。
 
-Every incoming message is scored against every existing conversation: title + summary card + sampled user messages + last assistant reply, embedded in chunks (max similarity, not average). A second, cheaper model arbitrates `continue / switch / new`, and low confidence always means "don't switch" — silently opening a new chamber is the most expensive mistake in this design.
+---
 
-If the embedding endpoint is down, routing degrades to lexical matching instead of failing. Every decision is logged to `data/routing.jsonl` so you can inspect *why* it switched.
-
-→ [`src/core/topicRouter.ts`](src/core/topicRouter.ts:1) · [`src/core/semanticRoute.ts`](src/core/semanticRoute.ts:1) · [`src/core/topicArbiter.ts`](src/core/topicArbiter.ts:1)
-
-### 2. Feishu-native, not "Feishu notifications"
-
-Inbound messages arrive over Feishu's long connection (no public callback URL). Replies are rendered as interactive cards when they contain Markdown — with a plain-text fallback when the tenant can't render cards. `/topics` sends a collapsible card per conversation, with a button that moves the pointer; `/clear` resets only that Feishu conversation's context.
-
-→ [`src/channels/feishu.ts`](src/channels/feishu.ts:1) · [`src/channels/topicCard.ts`](src/channels/topicCard.ts:1) · [`src/channels/mdCard.ts`](src/channels/mdCard.ts:1)
-
-### 3. Memory and guardrails per teammate
-
-Each teammate is a directory of five small files (`SOUL / identity / persona / bible / MEMORY`) plus `waker.yaml`. Independent LLM credentials and Feishu app per teammate. Policy is enforced at the **tool replacement layer**, not the event layer:
-
-- command allow/deny lists (word-boundary matching, not naive substring)
-- path allow/deny (credentials like `.ssh` / `.env` are blocked for both `read` and `bash`)
-- optional Docker sandbox per teammate
-- `selfEdit` lets a teammate rewrite its own prompt files — but **never** its policy; every write is backed up and logged
-
-→ [`extensions/waker-guard.ts`](extensions/waker-guard.ts:1) · [`src/core/identity.ts`](src/core/identity.ts:1) · [`README.zh.md`](README.zh.md:147) (detailed design)
-
-## Architecture
+## 一张图看懂
 
 ```
-Entry points (CLI / cron / Feishu / HTTP API / board)
-        │
-  Platform shell (this repo)
-  ├─ registry     scan & validate teammate profiles
-  ├─ identity     compile identity at build time (not per turn)
-  ├─ guard        compile policy → data/policy/<id>.policy.json
-  ├─ runner       spawn pi, queue per session, lock across processes
-  ├─ scheduler    cron / one-shot / event
-  ├─ board        task ledger + todos
-  └─ gateway      HTTP data source + static board
-        │ symlinked, never copied
-  Pi extensions
-  ├─ waker-identity   inject role prompt at before_agent_start
-  └─ waker-guard      bash interception + optional Docker sandbox
-        │
-  Pi core (MIT)
+          你在哪说话                      它怎么处理                      谁在干活
+    ┌──────────────────┐          ┌───────────────────────┐      ┌──────────────────┐
+    │  网页看板（对话） │          │        Revolver       │      │ 员工：助理        │
+    │  飞书（手机/桌面）│ ────▶   │  ① 这句话属于哪个话题？ │ ──▶ │ 员工：写手        │
+    │  命令行 waker     │          │  ② 该由哪个员工接？     │      │ 员工：客服        │
+    └──────────────────┘          │  ③ 记住说过什么        │      └──────────────────┘
+                                  └───────────────────────┘              │
+                                             │ 每个员工有自己的人设、    │
+                                             │ 权限、模型、记忆          │
+                                             ▼                          ▼
+                                  你自己电脑上的文件夹（agents/ data/）
 ```
 
-The platform deliberately stays thin: ~15.6k lines of TypeScript plus ~6.9k lines of React. Pi keeps the agent loop; this repo owns identity, policy, routing, channels, scheduling and the console.
+员工不是"一个模型"，而是**一个文件夹**，里面五份小文件决定它是谁、怎么说话、什么不能做、记得什么：
 
-## Screenshots
+```
+agents/写手/
+├── SOUL.md        它是谁、怎么判断、什么语气
+├── identity.md    它服务谁、负责什么
+├── persona.md     工作习惯、产出格式
+├── bible.md       红线：哪些事必须先问你
+├── MEMORY.md      长期记忆
+└── waker.yaml     用哪个模型、能碰哪些目录、能不能跑命令、接哪个飞书
+```
 
-![Conversation](docs/对话窗预览.png)
+改动下一句话就生效。不满意就改文件，不用等发版。
 
-Both screenshots come from an isolated demo workspace (`WAKER_AGENTS` / `WAKER_DATA` / `PI_HOME` under `/tmp`), not from a real account.
+---
 
-## Try it without touching your data
+## 它和"一个 AI 开一堆会话"的区别
+
+普通桌面 agent 的用法是：**你**开新会话、**你**记得上次在哪个窗口聊的。
+
+这里的做法是：**话题跟着内容走，不跟着窗口走。**
+
+```
+你发一句：「接着上次那个播客标题，再口语一点」
+
+  ①  先给所有旧话题打分（这句话跟每个话题有多像）
+  ②  再看该不该动当前窗口：
+        很像当前话题        → 直接接着聊（默认，最省事）
+        像另一个旧话题      → 问你一句「像是在聊《播客标题》，切过去吗」
+        都不像 + 很久没聊   → 开一个新话题
+        拿不准              → 不切（宁可少切，也不让你觉得它"忘了刚才"）
+  ③  切了就记住：这个窗口现在对着哪个话题
+```
+
+所以：
+
+- 你在飞书私聊里随口一句"那个预算表帮我改下"，它自己回到做预算表的那条线，不用你翻聊天记录。
+- 每一条判定都写进 `data/routing.jsonl`，为什么切、为什么没切，随时能查。
+- 判断靠两样东西：**这句话和每个话题的相似度** + **一个小模型做裁判**。裁判没把握时一律不切。
+
+看板里还能看到 20 多个话题的卡片，点一下就切，跟你自己手动控制不冲突。
+
+---
+
+## 安装（一条命令）
+
+需要先有：**macOS 或 Linux**、**Node 22 以上**（没有的话装一个 Node 就行）。
 
 ```bash
 git clone https://github.com/MoeWangG/revolver.git
 cd revolver
-
-bash scripts/setup.sh     # dependencies, console build, Pi extension links, `waker` command
-bash scripts/demo.sh      # seeds /tmp/revolver-demo and serves http://127.0.0.1:8799
+bash scripts/setup.sh
 ```
 
-The demo has two teammates, four conversations and a few todos. It never reads `agents/`, `data/` or `~/.pi`.
+`setup.sh` 会把该装的都装完，不用你再选任何东西：命令行工具、网页界面、模型内核、员工模板、跨会话记忆。
 
-## Install
-
-| Requirement | Why |
-|---|---|
-| **Node 22+** | runs the platform |
-| **pnpm** | workspace installs |
-| **[Pi](https://github.com/earendil-works/pi) CLI** (`npm i -g @earendil-works/pi-coding-agent`) | the agent kernel; without it the console still loads but cannot answer |
-| Python 3.9+ *(optional)* | the bundled memory server |
-| An embedding endpoint *(optional)* | semantic routing; falls back to lexical matching |
-| A Feishu tenant *(optional)* | inbound messages and cards |
+装完它会告诉你下一步做什么。通常是：
 
 ```bash
-git clone https://github.com/MoeWangG/revolver.git
-cd revolver
-bash scripts/setup.sh         # idempotent; installs `waker` into ~/.local/bin
-waker doctor                  # check node / pi / memory / docker
-waker chat assistant          # interactive (creates agents/assistant on first use)
-waker board --port 8787       # console at http://127.0.0.1:8787
+waker chat assistant      # 和你的第一个员工说话（第一次会让你登录/填模型 key）
+waker board --port 8787   # 或者打开网页看板 http://127.0.0.1:8787
 ```
 
-## Use
+> 只想先看看长什么样、不碰任何配置：`bash scripts/demo.sh`，它会用一份假的演示数据起在 8799 端口。
+
+### 关于模型
+
+对话要有模型。两种都行：
+
+- **用云端的**：DeepSeek、通义、OpenAI 之类，一个 key 就够，按量付费。
+- **用本机的**：装了 LM Studio 或 Ollama 就能完全离线、零成本，数据一个字节都不出机器。
+
+第一次 `waker chat` 会引导你配好，之后不用再管。
+
+---
+
+## 开始用
 
 ```bash
-waker say assistant "summarize today's work"    # one message, keeps context
-waker sessions assistant                       # list conversations
-waker chat assistant --new                     # start a new conversation
-waker cron add assistant "0 9 * * *" "morning digest"   # scheduled task
-waker tasks                                    # recent task ledger
+waker agent new 写手 --role "写公众号和小红书稿子" --cwd ~/Documents/writing
+waker agent new 客服 --role "回答产品问题，遇到退款就转人工"
+
+waker chat 写手            # 和它单独聊（保留上下文，下次接着聊）
+waker say 写手 "把上次那篇改成 800 字"   # 一句话，适合写脚本
+
+waker board --port 8787    # 看板：今天谁干了什么、花了多少、有哪些待办
 ```
 
-**Feishu (optional).** Four steps:
+看板上能做的事：新建/编辑员工、看每个员工花了多少钱和多少 token、看定时任务、看待办、改权限、接飞书。
 
-1. Create a Feishu app and enable the long-connection event `im.message.receive_v1`.
-2. Grant the bot message send/receive permissions and publish the app.
-3. Put `appId` in `agents/<id>/waker.yaml` under `channels.feishu`; put `appSecret` in `agents/<id>/secrets.json` (git-ignored).
-4. Restart `waker board`. Messages, Markdown cards and `/topics` are then live.
+### 接飞书（可选但推荐）
 
-### Memory (optional)
+手机上直接说话，比开电脑方便。在员工的 `waker.yaml` 里填上飞书应用的 `appId`，`secrets.json` 里填 `appSecret`，重启看板即可。用飞书的长连接收消息，**不需要公网服务器、不需要域名**。
 
-The namespaced memory server lives in `vendor/multi-pi-memory`. It is **not started by default**:
+---
 
-```bash
-bash vendor/multi-pi-memory/memory-server/install.sh   # interactive: picks an embedding backend
-bash vendor/multi-pi-memory/scripts/start.sh           # http://127.0.0.1:8971
-```
+## 你花的钱去哪了
 
-Without it, `MEMORY.md` and conversation history still work; only automatic cross-session recall is unavailable.
+- 每次对话只发**跟当前话题相关**的内容，不是整个历史。
+- 聊得太长（默认超过 3 万 token）会自动压成一段纪要，旧原文归档留底。之后的每一轮只带纪要。
+- 看板能看到每个员工的今日 / 7 天 / 30 天花费，按模型单价实时算。
+- 每个员工可以配不同的模型：写作用的贵一点，客服的便宜一点。
 
-## Repo layout
+---
 
-| Path | What it is |
-|---|---|
-| `src/core/` | profile registry, identity compiler, runner, sessions, routing, todos |
-| `src/channels/` | channel abstraction + Feishu implementation + card rendering |
-| `src/scheduler/` | cron, one-shot, task ledger, board snapshot |
-| `src/gateway/` | local HTTP API |
-| `web/` | React console (Vite + Tailwind) |
-| `extensions/` | Pi extensions injected by symlink |
-| `examples/` | sanitized teammate template |
-| `docs/` | product notes and design docs (Chinese) |
-| `tests/` | 15 test files, 398 assertions, no test framework |
+## 你的数据在哪
 
-## Tests
+| 东西 | 位置 | 会不会上传 |
+|---|---|---|
+| 员工档案、人设 | `agents/<员工>/` | 不会，只在你本地 |
+| 聊天记录 | `~/.pi/agent/sessions/` | 不会 |
+| 记忆、任务流水、话题判定日志 | `data/` | 不会 |
+| 模型调用 | 直接连你配的那家（或本机模型） | 只发本次要处理的内容 |
 
-```bash
-npx tsc -p tsconfig.json --noEmit     # 0 errors
-npm test                              # 15 files / 398 assertions
-cd web && npm run build               # production console build
+`agents/` 和 `data/` 默认不进 git（`.gitignore` 已挡），不会因为 `git push` 泄露。
 
-# or run the whole fresh-clone check (deps, types, tests, build, demo board)
-bash scripts/smoke.sh
-```
+---
 
-## Status and limitations
+## 常见问题
 
-This is a **personal project, built for my own workflow** — not a supported product. Things you should know before trying it:
+**要花多少钱？**
+按 token 算。日常问答和写作，通常一天几分到几毛钱；用本机模型则是 0。看板里有实时账单。
 
-- Topic routing is currently wired into the **Feishu inbound path**. The web console picks a session explicitly.
-- Semantic routing prefers a local embedding endpoint (`127.0.0.1:1234`, `text-embedding-bge-m3`) and falls back to lexical matching when it is unavailable. `scripts/lms-guard.mjs` (launchd `com.waker.lms-guard`, every 5 min) keeps LM Studio up and both the embedding and arbiter models loaded, so the fallback only triggers on a real outage.
-- The memory server (a namespaced fork of `pi-memory`) is bundled under `vendor/`, but it is not started by default and needs Python 3.9+ plus an embedding backend.
-- Sessions live in Pi's own store (`~/.pi/agent/sessions`); this repo never rewrites them.
-- Tested on macOS. Linux should work; launchd-specific helpers won't.
+**断网能用吗？**
+接本机模型（LM Studio / Ollama）可以完全离线。
 
-## Documentation
+**能管几个员工？**
+没有硬限制，实际用 3~10 个最舒服。每个员工可以有自己的模型、飞书应用、权限。
 
-- [Product notes (中文)](docs/产品说明书.md) — full feature and design documentation
-- [Session switching (中文)](docs/会话切换.md) — how routing, arbitration and the pointer layer fit together
-- [Changelog](CHANGELOG.md) — every version, with *why* and how it was verified
+**它会乱删我文件吗？**
+默认每条员工都有一层门禁：能跑哪些命令、能碰哪些目录、碰到删改/发布要不要先问你。这些都在 `waker.yaml` 里写着，改之前会提醒你影响。
+
+**能改它吗？**
+MIT 协议，整个仓库你都能读能改。没有隐藏的闭源组件。
+
+---
+
+## 想深入原理
+
+- 会话分流怎么判、阈值怎么定：[`docs/会话切换.md`](docs/会话切换.md)
+- 完整技术说明（安全模型、员工档案、IM 渠道、目录结构）：[`docs/技术说明.md`](docs/技术说明.md)
+- 产品说明书（每个功能为什么这么做）：[`docs/产品说明书.md`](docs/产品说明书.md)
+- 版本记录：[`CHANGELOG.md`](CHANGELOG.md)
 
 ## License
 
-[MIT](LICENSE)
+MIT
